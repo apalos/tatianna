@@ -262,13 +262,13 @@ class reddit_feed:
             try:
                 pnum = random.randint(1, len(json_data['data']['children']) - 1)
             except KeyError, ValueError:
-                link = 'Overejaculation overflow. Try again'
+                link = 'Overexcitement overflow. Try again'
                 None
 
             try:
                 data = json_data['data']['children'][pnum]['data']
             except KeyError, ValueError:
-                link = 'Overejaculation detected. Try again'
+                link = 'Overexcitement detected. Try again'
             else:
                 link = data['url']
         else:
@@ -282,10 +282,10 @@ class fb_feed:
         """
 
     def get_fb_post(self, init_url, rchoice, app_id, app_secret, pnum=None):
-        stalk_url = init_url + rchoice
+        follow_url = init_url + rchoice
         ret = None
         #extract post data
-        post_url = self.create_post_url(stalk_url, app_id, app_secret)
+        post_url = self.create_post_url(follow_url, app_id, app_secret)
         json_postdata = render_to_json(post_url)
         if json_postdata:
             json_fbposts = json_postdata['data']
