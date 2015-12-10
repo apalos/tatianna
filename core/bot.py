@@ -24,6 +24,9 @@ from BeautifulSoup import BeautifulSoup
 from contextlib import closing
 from datetime import datetime, timedelta
 from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
+from os.path import join as os_path_join
+from os.path import isfile as os_path_isfile
+from os.path import dirname as os_path_dirname
 
 false = False
 true = True
@@ -243,15 +246,46 @@ class http_api:
             ret = 'OLD! ' + qu + ' mentioned it ' + out
         return ret
 
+def expand_bot_path(filename):
+    '''
+    '''
+    # try "core/"
+    first_try = os_path_join(os_path_dirname(__file__), filename)
+    if os_path_isfile(first_try):
+        return first_try
+
+    # try "core/.."
+    second_try = os_path_join(os_path_dirname(__file__), '..', filename)
+    if os_path_isfile(second_try):
+        return second_try
+
+    raise IOError('File "{0}" not found under "{1}" or "{2}"'.format(
+                  filename, first_try, second_try))
+
+
 class reddit_feed:
+
+    subreddits = None
+
     def __init__(self):
         """
         """
+        subreddits_file = "subreddits.json"
+        try:
+            with open(expand_bot_path(subreddits_file), 'r') as f:
+                self.subreddits = json.loads(f.read())
+
+        except Exception, e:
+            print "Caught exception while loading subreddits ({}), using defaults".format(subreddits_file)
+            print "%s: %s" % (e.__class__.__name__, e.args)
+            self.subreddits = [
+                    'AskReddit', 'funny', 'videos', 'WTF', 'movies',
+                    'videos', 'gaming'
+            ]
+
 
     def get_reddit_url(self, what = None):
-        subreddits = ['AskReddit', 'funny', 'videos', 'WTF', 'movies',
-                       'videos', 'gaming']
-
+        subreddits = self.subreddits
         link = ''
 
         if what:
