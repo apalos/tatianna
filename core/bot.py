@@ -20,9 +20,10 @@ import sys
 import ssl
 import types
 
-from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
-from datetime import datetime, timedelta
 from BeautifulSoup import BeautifulSoup
+from contextlib import closing
+from datetime import datetime, timedelta
+from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 
 false = False
 true = True
@@ -31,6 +32,8 @@ fkey = 0
 fapi = 0
 pver = sys.version_info
 db_file = 'tat.sqlite3'
+
+MAX_DL_SIZE = 3145728
 
 class str_ops:
     def __init__(self):
@@ -424,43 +427,50 @@ class bot_connect(irc.bot.SingleServerIRCBot):
                     return value
         return None
 
-def open_url(url, tout = 10):
+
+def open_url(url, tout = 10, max_download_size=MAX_DL_SIZE):
     sz = 0
-    user_agent = {'User-agent': 'Mozilla/5.0'}
-    err = [(-3, 'Unknown mime type'), (-2, 'File size exceeded'),
-            (-1, 'Request failed')]
 
+    user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; PPC Mac OS X 10.9; rv:41.0) Gecko/20100101 Firefox/41.0'}
+    # this is still horrible but at least less prone to mistakes
+    # due to ordering
+    err = {
+            'ERR-4': (-4, 'Other exception'),
+            'ERR-3': (-3, 'Unknown mime type'),
+            'ERR-2': (-2, 'File size exceeded'),
+            'ERR-1': (-1, 'Request failed')
+          }
 
-    try:
-        resp = requests.head(url, headers = user_agent, timeout = tout)
-    except requests.exceptions.RequestException, e:
-        print 'Error retrieving {}: {}' . format(url, e)
-        return err[2]
-    except Exception:
-        print traceback.format_exc()
-    else:
-        try:
-            sz = int(resp.headers['content-length'])
-        except KeyError:
-            sz = 0
-        try:
-            mime = resp.headers['content-type']
-        except KeyError:
-            mime = ''
-        if sz > 3145728:
-            return err[1]
-        if mime[:9] != 'text/html' and mime[:16] != 'application/json':
-            return err[0]
+    length_so_far = 0
+    full_content = ""
 
     try:
-        resp = requests.get(url, headers = user_agent, allow_redirects = False, timeout = tout)
+        with closing(requests.get(url, stream=True, headers=user_agent, timeout=tout)) as resp:
+            for content in resp.iter_content(chunk_size=256000, decode_unicode=False):
+                length_so_far += len(content)
+                full_content += content
+                if length_so_far > max_download_size:
+                    break
+            print "Fetched: {} bytes".format(length_so_far)
+            try:
+                mime = resp.headers['content-type']
+            except KeyError:
+                mime = ''
+            # this can probably optimised by setting the accept http header but leaving
+            # it as is, as we are just trying to fix the content length issues
+            if mime[:9] != 'text/html' and mime[:16] != 'application/json':
+                return err['ERR-3']
+
     except requests.exceptions.RequestException, e:
         print 'Error retrieving {}: {}' . format(url, e)
-        return err[2]
+        return err['ERR-1']
     except Exception:
+        # is this ever reached? @apalos
         print traceback.format_exc()
+        return err['ERR-4']
 
-    return (len(resp.content), resp.content)
+    return (length_so_far, full_content)
+
 
 def render_to_json(url):
     #render graph url call to JSON
