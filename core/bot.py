@@ -20,9 +20,13 @@ import sys
 import ssl
 import types
 
-from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
-from datetime import datetime, timedelta
 from BeautifulSoup import BeautifulSoup
+from contextlib import closing
+from datetime import datetime, timedelta
+from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
+from os.path import join as os_path_join
+from os.path import isfile as os_path_isfile
+from os.path import dirname as os_path_dirname
 
 false = False
 true = True
@@ -31,6 +35,8 @@ fkey = 0
 fapi = 0
 pver = sys.version_info
 db_file = 'tat.sqlite3'
+
+MAX_DL_SIZE = 3145728
 
 class str_ops:
     def __init__(self):
@@ -240,15 +246,46 @@ class http_api:
             ret = 'OLD! ' + qu + ' mentioned it ' + out
         return ret
 
+def expand_bot_path(filename):
+    '''
+    '''
+    # try "core/"
+    first_try = os_path_join(os_path_dirname(__file__), filename)
+    if os_path_isfile(first_try):
+        return first_try
+
+    # try "core/.."
+    second_try = os_path_join(os_path_dirname(__file__), '..', filename)
+    if os_path_isfile(second_try):
+        return second_try
+
+    raise IOError('File "{0}" not found under "{1}" or "{2}"'.format(
+                  filename, first_try, second_try))
+
+
 class reddit_feed:
+
+    subreddits = None
+
     def __init__(self):
         """
         """
+        subreddits_file = "subreddits.json"
+        try:
+            with open(expand_bot_path(subreddits_file), 'r') as f:
+                self.subreddits = json.loads(f.read())
+
+        except Exception, e:
+            print "Caught exception while loading subreddits ({}), using defaults".format(subreddits_file)
+            print "%s: %s" % (e.__class__.__name__, e.args)
+            self.subreddits = [
+                    'AskReddit', 'funny', 'videos', 'WTF', 'movies',
+                    'videos', 'gaming'
+            ]
+
 
     def get_reddit_url(self, what = None):
-        subreddits = ['AskReddit', 'funny', 'videos', 'WTF', 'movies',
-                       'videos', 'gaming']
-
+        subreddits = self.subreddits
         link = ''
 
         if what:
@@ -262,13 +299,13 @@ class reddit_feed:
             try:
                 pnum = random.randint(1, len(json_data['data']['children']) - 1)
             except KeyError, ValueError:
-                link = 'Overejaculation overflow. Try again'
+                link = 'Overexcitement overflow. Try again'
                 None
 
             try:
                 data = json_data['data']['children'][pnum]['data']
             except KeyError, ValueError:
-                link = 'Overejaculation detected. Try again'
+                link = 'Overexcitement detected. Try again'
             else:
                 link = data['url']
         else:
@@ -282,10 +319,10 @@ class fb_feed:
         """
 
     def get_fb_post(self, init_url, rchoice, app_id, app_secret, pnum=None):
-        stalk_url = init_url + rchoice
+        follow_url = init_url + rchoice
         ret = None
         #extract post data
-        post_url = self.create_post_url(stalk_url, app_id, app_secret)
+        post_url = self.create_post_url(follow_url, app_id, app_secret)
         json_postdata = render_to_json(post_url)
         if json_postdata:
             json_fbposts = json_postdata['data']
@@ -424,43 +461,50 @@ class bot_connect(irc.bot.SingleServerIRCBot):
                     return value
         return None
 
-def open_url(url, tout = 10):
+
+def open_url(url, tout = 10, max_download_size=MAX_DL_SIZE):
     sz = 0
-    user_agent = {'User-agent': 'Mozilla/5.0'}
-    err = [(-3, 'Unknown mime type'), (-2, 'File size exceeded'),
-            (-1, 'Request failed')]
 
+    user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; PPC Mac OS X 10.9; rv:41.0) Gecko/20100101 Firefox/41.0'}
+    # this is still horrible but at least less prone to mistakes
+    # due to ordering
+    err = {
+            'ERR-4': (-4, 'Other exception'),
+            'ERR-3': (-3, 'Unknown mime type'),
+            'ERR-2': (-2, 'File size exceeded'),
+            'ERR-1': (-1, 'Request failed')
+          }
 
-    try:
-        resp = requests.head(url, headers = user_agent, timeout = tout)
-    except requests.exceptions.RequestException, e:
-        print 'Error retrieving {}: {}' . format(url, e)
-        return err[2]
-    except Exception:
-        print traceback.format_exc()
-    else:
-        try:
-            sz = int(resp.headers['content-length'])
-        except KeyError:
-            sz = 0
-        try:
-            mime = resp.headers['content-type']
-        except KeyError:
-            mime = ''
-        if sz > 3145728:
-            return err[1]
-        if mime[:9] != 'text/html' and mime[:16] != 'application/json':
-            return err[0]
+    length_so_far = 0
+    full_content = ""
 
     try:
-        resp = requests.get(url, headers = user_agent, allow_redirects = False, timeout = tout)
+        with closing(requests.get(url, stream=True, headers=user_agent, timeout=tout)) as resp:
+            for content in resp.iter_content(chunk_size=256000, decode_unicode=False):
+                length_so_far += len(content)
+                full_content += content
+                if length_so_far > max_download_size:
+                    break
+            print "Fetched: {} bytes".format(length_so_far)
+            try:
+                mime = resp.headers['content-type']
+            except KeyError:
+                mime = ''
+            # this can probably optimised by setting the accept http header but leaving
+            # it as is, as we are just trying to fix the content length issues
+            if mime[:9] != 'text/html' and mime[:16] != 'application/json':
+                return err['ERR-3']
+
     except requests.exceptions.RequestException, e:
         print 'Error retrieving {}: {}' . format(url, e)
-        return err[2]
+        return err['ERR-1']
     except Exception:
+        # is this ever reached? @apalos
         print traceback.format_exc()
+        return err['ERR-4']
 
-    return (len(resp.content), resp.content)
+    return (length_so_far, full_content)
+
 
 def render_to_json(url):
     #render graph url call to JSON
