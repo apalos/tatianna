@@ -364,6 +364,8 @@ class bot_connect(irc.bot.SingleServerIRCBot):
         self.channel = '#' + channel
         self.nickname = nickname
         self.realname = realname
+        # set 'errors' to replace unicode decode failures with '?'
+        self.connection.buffer_class.errors = 'replace'
         try:
             self.start()
         except KeyboardInterrupt:
