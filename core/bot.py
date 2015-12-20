@@ -608,7 +608,7 @@ def main():
         port =  int(get_cfg_value(configfile, 'irc', 'port'))
         fkey =  get_cfg_value(configfile, 'irc', 'facebook_key', 'no')
         fapi =  get_cfg_value(configfile, 'irc', 'facebook_api', 'no')
-    except ValueError:
+    except ValueError as e:
         print('Options missing %s') % e
         exit(1);
 
