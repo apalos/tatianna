@@ -372,6 +372,9 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             self.connection.quit("Exiting.")
             print "Quit IRC."
         except Exception, e:
+            # add better exception handling and stacktrace
+            print "%s: %s" % (e.__class__.__name__, e.args)
+            traceback.print_exc()
             self.connection.quit("%s: %s" % (e.__class__.__name__, e.args))
         raise
 
