@@ -6,13 +6,13 @@
 #
 # -*- coding: UTF-8 -*-
 
+import ConfigParser
 import re
 import traceback
 import requests
 import json
 import random
 import time
-import getopt
 import sqlite3
 import irc.bot
 import irc.strings
@@ -22,6 +22,7 @@ import types
 
 from BeautifulSoup import BeautifulSoup
 from contextlib import closing
+from ConfigParser import SafeConfigParser
 from datetime import datetime, timedelta
 from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 from os.path import join as os_path_join
@@ -31,8 +32,8 @@ from os.path import dirname as os_path_dirname
 false = False
 true = True
 none = None
-fkey = 0
-fapi = 0
+fkey = None
+fapi = None
 pver = sys.version_info
 db_file = 'tat.sqlite3'
 
@@ -411,10 +412,13 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             #             'HuffingtonPost', 'aljazeera', 'bbcnews']
             newslist = ['lubenmag', 'tokoulouri']
             nfeed = random.choice(newslist)
-            post = a.get_fb_post("https://graph.facebook.com/", nfeed, fapi, fkey, None)
-            if post:
-                fpost = nfeed + ': ' + post
-                safe_tell(con, chan, fpost)
+            if fapi:
+                post = a.get_fb_post("https://graph.facebook.com/", nfeed, fapi, fkey, None)
+                if post:
+                    fpost = nfeed + ': ' + post
+                    safe_tell(con, chan, fpost)
+            else:
+                safe_tell(con, chan, 'Facebook keys missing')
         elif cmd[0] == '!reddit':
             a = reddit_feed()
             if len(cmd) > 1:
@@ -557,13 +561,27 @@ def safe_tell(con, chan, what):
             print(err)
 
 def usage():
-    print('usage: --help, -h: help')
-    print('       --server, -s: server')
-    print('       --channel, -c: channel')
-    print('       --port, -p: port')
-    print('       --ssl, -t: enable SSL')
-    print('       --face_api, -a: Facebook API')
-    print('       --face_key, -k: Facebook KEY')
+    print('usage: bot.py <config file>')
+
+def get_cfg_value(configfile, category, what, strict = 'yes'):
+    ret = None
+    parser = SafeConfigParser()
+    # FIXME make the path configurable
+    parser.read(configfile)
+
+    try:
+        ret = parser.get(category, what)
+    except ConfigParser.NoSectionError:
+        print('No section [%s] found in config file. Fix your config file' % category)
+        if strict == 'yes':
+            exit(1);
+    except ConfigParser.NoOptionError:
+        print('No option %s= found in config file. Fix your config file' % what)
+        if strict == 'yes':
+            exit(1);
+
+    return ret
+
 
 def main():
 
@@ -575,33 +593,29 @@ def main():
         'teslas',
         'vrx',
     ]
-
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'c:s:k:a:p:t',
-                ['channel=', 'server=', 'face_key=', 'face_api=', 'port=', 'ssl'])
-    except getopt.GetoptError as err:
-        print('%s' % (str(err))) # will print something like "option -a not recognized"
+        configfile = sys.argv[1]
+    except IndexError:
         usage()
-        sys.exit(2)
+        exit(1)
 
-    port = 6667
-    ssl_en = false
+    # XXX FIXME better error checking on config file
+    try:
+        port = get_cfg_value(configfile, 'irc', 'port')
+        server = get_cfg_value(configfile, 'irc', 'server')
+        ssl_en =  get_cfg_value(configfile, 'irc', 'ssl')
+        channel =  get_cfg_value(configfile, 'irc', 'channel')
+        port =  int(get_cfg_value(configfile, 'irc', 'port'))
+        fkey =  get_cfg_value(configfile, 'irc', 'facebook_key', 'no')
+        fapi =  get_cfg_value(configfile, 'irc', 'facebook_api', 'no')
+    except ValueError:
+        print('Options missing %s') % e
+        exit(1);
 
-    for o, a in opts:
-        if o in ('-s', '--server'):
-            server = a
-        elif o in ('-c', '--channel'):
-            channel = a
-        elif o in ('-k', '--face_key'):
-            global fkey
-            fkey = a
-        elif o in ('-a', '--face_api'):
-            global fapi
-            fapi = a
-        elif o in ('-p', '--port'):
-            port = int(a)
-        elif o in ('-t', '--ssl'):
-            ssl_en = true
+    if ssl_en == 'yes':
+        ssl_en = true
+    else:
+        ssl_en = false
 
     nickname = random.choice(petnames)
     realname = random.choice(petnames)
