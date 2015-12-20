@@ -365,12 +365,17 @@ class bot_connect(irc.bot.SingleServerIRCBot):
         self.channel = '#' + channel
         self.nickname = nickname
         self.realname = realname
+        # set 'errors' to replace unicode decode failures with '?'
+        self.connection.buffer_class.errors = 'replace'
         try:
             self.start()
         except KeyboardInterrupt:
             self.connection.quit("Exiting.")
-            print("Quit IRC.")
+            print "Quit IRC."
         except Exception as e:
+            # add better exception handling and stacktrace
+            print "%s: %s" % (e.__class__.__name__, e.args)
+            traceback.print_exc()
             self.connection.quit("%s: %s" % (e.__class__.__name__, e.args))
         raise
 
