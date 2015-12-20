@@ -6,13 +6,13 @@
 #
 # -*- coding: UTF-8 -*-
 
+import ConfigParser
 import re
 import traceback
 import requests
 import json
 import random
 import time
-import getopt
 import sqlite3
 import irc.bot
 import irc.strings
@@ -22,6 +22,7 @@ import types
 
 from BeautifulSoup import BeautifulSoup
 from contextlib import closing
+from ConfigParser import SafeConfigParser
 from datetime import datetime, timedelta
 from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 from os.path import join as os_path_join
@@ -31,8 +32,8 @@ from os.path import dirname as os_path_dirname
 false = False
 true = True
 none = None
-fkey = 0
-fapi = 0
+fkey = None
+fapi = None
 pver = sys.version_info
 db_file = 'tat.sqlite3'
 
@@ -189,7 +190,7 @@ class http_api:
         res, resp = open_url(url)
         title = ''
 
-        print res
+        print(res)
         if res != -1:
             try:
                 soup = BeautifulSoup(resp)
@@ -275,9 +276,9 @@ class reddit_feed:
             with open(expand_bot_path(subreddits_file), 'r') as f:
                 self.subreddits = json.loads(f.read())
 
-        except Exception, e:
-            print "Caught exception while loading subreddits ({}), using defaults".format(subreddits_file)
-            print "%s: %s" % (e.__class__.__name__, e.args)
+        except Exception as e:
+            print("Caught exception while loading subreddits ({}), using defaults".format(subreddits_file))
+            print("%s: %s") % (e.__class__.__name__, e.args)
             self.subreddits = [
                     'AskReddit', 'funny', 'videos', 'WTF', 'movies',
                     'videos', 'gaming'
@@ -298,13 +299,13 @@ class reddit_feed:
         if json_data:
             try:
                 pnum = random.randint(1, len(json_data['data']['children']) - 1)
-            except KeyError, ValueError:
+            except KeyError as ValueError:
                 link = 'Overexcitement overflow. Try again'
                 None
 
             try:
                 data = json_data['data']['children'][pnum]['data']
-            except KeyError, ValueError:
+            except KeyError as ValueError:
                 link = 'Overexcitement detected. Try again'
             else:
                 link = data['url']
@@ -337,11 +338,11 @@ class fb_feed:
 
             try:
                 news = post['message']
-            except KeyError, ValueError:
+            except KeyError as ValueError:
                 news = ''
             try:
                 link = ' ' + post['link']
-            except KeyError, ValueError:
+            except KeyError as ValueError:
                 link = ''
 
             ret = news + link
@@ -371,7 +372,7 @@ class bot_connect(irc.bot.SingleServerIRCBot):
         except KeyboardInterrupt:
             self.connection.quit("Exiting.")
             print "Quit IRC."
-        except Exception, e:
+        except Exception as e:
             # add better exception handling and stacktrace
             print "%s: %s" % (e.__class__.__name__, e.args)
             traceback.print_exc()
@@ -380,7 +381,7 @@ class bot_connect(irc.bot.SingleServerIRCBot):
 
     # XXX on_ events check events.py
     def on_nicknameinuse(self, con, evnt):
-        print "Nickname in use"
+        print("Nickname in use")
 
     def on_welcome(self, con, evnt):
         con.join(self.channel)
@@ -416,10 +417,13 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             #             'HuffingtonPost', 'aljazeera', 'bbcnews']
             newslist = ['lubenmag', 'tokoulouri']
             nfeed = random.choice(newslist)
-            post = a.get_fb_post("https://graph.facebook.com/", nfeed, fapi, fkey, None)
-            if post:
-                fpost = nfeed + ': ' + post
-                safe_tell(con, chan, fpost)
+            if fapi:
+                post = a.get_fb_post("https://graph.facebook.com/", nfeed, fapi, fkey, None)
+                if post:
+                    fpost = nfeed + ': ' + post
+                    safe_tell(con, chan, fpost)
+            else:
+                safe_tell(con, chan, 'Facebook keys missing')
         elif cmd[0] == '!reddit':
             a = reddit_feed()
             if len(cmd) > 1:
@@ -490,7 +494,7 @@ def open_url(url, tout = 10, max_download_size=MAX_DL_SIZE):
                 full_content += content
                 if length_so_far > max_download_size:
                     break
-            print "Fetched: {} bytes".format(length_so_far)
+            print("Fetched: {} bytes".format(length_so_far))
             try:
                 mime = resp.headers['content-type']
             except KeyError:
@@ -500,12 +504,12 @@ def open_url(url, tout = 10, max_download_size=MAX_DL_SIZE):
             if mime[:9] != 'text/html' and mime[:16] != 'application/json':
                 return err['ERR-3']
 
-    except requests.exceptions.RequestException, e:
-        print 'Error retrieving {}: {}' . format(url, e)
+    except requests.exceptions.RequestException as e:
+        print('Error retrieving {}: {}') . format(url, e)
         return err['ERR-1']
     except Exception:
         # is this ever reached? @apalos
-        print traceback.format_exc()
+        print(traceback.format_exc())
         return err['ERR-4']
 
     return (length_so_far, full_content)
@@ -519,7 +523,7 @@ def render_to_json(url):
     if res > 0:
         try:
             json_data = json.loads(resp)
-        except ValueError, e:
+        except ValueError as e:
             return None
 
     return json_data
@@ -556,19 +560,33 @@ def safe_tell(con, chan, what):
         try:
             for i in sayl:
                 con.privmsg(chan, i)
-        except irc.client.InvalidCharacters, err:
-            print err
-        except irc.client.MessageTooLong, err:
-            print err
+        except irc.client.InvalidCharacters as err:
+            print(err)
+        except irc.client.MessageTooLong as err:
+            print(err)
 
 def usage():
-    print('usage: --help, -h: help')
-    print('       --server, -s: server')
-    print('       --channel, -c: channel')
-    print('       --port, -p: port')
-    print('       --ssl, -t: enable SSL')
-    print('       --face_api, -a: Facebook API')
-    print('       --face_key, -k: Facebook KEY')
+    print('usage: bot.py <config file>')
+
+def get_cfg_value(configfile, category, what, strict = 'yes'):
+    ret = None
+    parser = SafeConfigParser()
+    # FIXME make the path configurable
+    parser.read(configfile)
+
+    try:
+        ret = parser.get(category, what)
+    except ConfigParser.NoSectionError:
+        print('No section [%s] found in config file. Fix your config file' % category)
+        if strict == 'yes':
+            exit(1);
+    except ConfigParser.NoOptionError:
+        print('No option %s= found in config file. Fix your config file' % what)
+        if strict == 'yes':
+            exit(1);
+
+    return ret
+
 
 def main():
 
@@ -580,33 +598,29 @@ def main():
         'teslas',
         'vrx',
     ]
-
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'c:s:k:a:p:t',
-                ['channel=', 'server=', 'face_key=', 'face_api=', 'port=', 'ssl'])
-    except getopt.GetoptError, err:
-        print('%s' % (str(err))) # will print something like "option -a not recognized"
+        configfile = sys.argv[1]
+    except IndexError:
         usage()
-        sys.exit(2)
+        exit(1)
 
-    port = 6667
-    ssl_en = false
+    # XXX FIXME better error checking on config file
+    try:
+        port = get_cfg_value(configfile, 'irc', 'port')
+        server = get_cfg_value(configfile, 'irc', 'server')
+        ssl_en =  get_cfg_value(configfile, 'irc', 'ssl')
+        channel =  get_cfg_value(configfile, 'irc', 'channel')
+        port =  int(get_cfg_value(configfile, 'irc', 'port'))
+        fkey =  get_cfg_value(configfile, 'irc', 'facebook_key', 'no')
+        fapi =  get_cfg_value(configfile, 'irc', 'facebook_api', 'no')
+    except ValueError as e:
+        print('Options missing %s') % e
+        exit(1);
 
-    for o, a in opts:
-        if o in ('-s', '--server'):
-            server = a
-        elif o in ('-c', '--channel'):
-            channel = a
-        elif o in ('-k', '--face_key'):
-            global fkey
-            fkey = a
-        elif o in ('-a', '--face_api'):
-            global fapi
-            fapi = a
-        elif o in ('-p', '--port'):
-            port = int(a)
-        elif o in ('-t', '--ssl'):
-            ssl_en = true
+    if ssl_en == 'yes':
+        ssl_en = true
+    else:
+        ssl_en = false
 
     nickname = random.choice(petnames)
     realname = random.choice(petnames)
@@ -616,7 +630,7 @@ def main():
 
     try:
         b = bot_connect(channel, nickname, realname, server, port, ssl_en)
-    except Exception, e:
+    except Exception as e:
         print('%s' % (e))
 
 if __name__ == '__main__':

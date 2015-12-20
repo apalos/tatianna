@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Run tests
 TEST_ENV=tests-env
 if [ -d "${TEST_ENV}" ]; then
