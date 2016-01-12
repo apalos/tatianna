@@ -292,20 +292,30 @@ class reddit_feed:
         if what:
             nfeed = what
         else:
-            nfeed = random.choice(subreddits)
+            try:
+                nfeed = random.choice(subreddits)
+            except Exception as e:
+                print("Subreddits {}".format(subreddits))
+                print("%s: %s" % (e.__class__.__name__, e.args))
+                return None
 
         json_data = render_to_json('http://www.reddit.com/r/' + nfeed + '/top.json?limit=50')
 
         if json_data:
             try:
-                pnum = random.randint(1, len(json_data['data']['children']) - 1)
-            except KeyError as ValueError:
+                children_length = len(json_data['data']['children'])
+                if children_length == 1:
+                    print("WARNING: children == 1 for {} - This used to throw an exception".format(what))
+                    pnum = json_data['data']['children']
+                else:
+                    pnum = random.randint(1, len(json_data['data']['children']) - 1)
+            except (KeyError, ValueError) as e:
                 link = 'Overexcitement overflow. Try again'
                 None
 
             try:
                 data = json_data['data']['children'][pnum]['data']
-            except KeyError as ValueError:
+            except (KeyError, ValueError) as e:
                 link = 'Overexcitement detected. Try again'
             else:
                 link = data['url']
@@ -329,6 +339,7 @@ class fb_feed:
             json_fbposts = json_postdata['data']
             #print post messages and ids
             if pnum == None:
+                # XXX this probably throws an exception too
                 pnum =  random.randint(1, len(json_fbposts) - 1)
 
             if len(json_fbposts) >= pnum:
@@ -338,6 +349,7 @@ class fb_feed:
 
             try:
                 news = post['message']
+            #XXX
             except KeyError as ValueError:
                 news = ''
             try:
@@ -356,6 +368,9 @@ class fb_feed:
 
 class bot_connect(irc.bot.SingleServerIRCBot):
     """Connect on channel"""
+
+    reddit_feed = None
+
     def __init__(self, channel, nickname, realname, server, port = 6667, ssl_en = False):
         if ssl_en:
             ssl_factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
@@ -374,7 +389,7 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             print "Quit IRC."
         except Exception as e:
             # add better exception handling and stacktrace
-            print "%s: %s" % (e.__class__.__name__, e.args)
+            print("%s: %s" % (e.__class__.__name__, e.args))
             traceback.print_exc()
             self.connection.quit("%s: %s" % (e.__class__.__name__, e.args))
         raise
@@ -425,13 +440,22 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             else:
                 safe_tell(con, chan, 'Facebook keys missing')
         elif cmd[0] == '!reddit':
-            a = reddit_feed()
-            if len(cmd) > 1:
-                url = a.get_reddit_url(cmd[1])
-            else:
-                url = a.get_reddit_url()
-            if url:
-                safe_tell(con, chan, 'NSFW ' + url)
+            # catch all exceptions in case something goes bad..
+            try:
+                if self.reddit_feed is None:
+                    print("Initialising reddit_feed")
+                    self.reddit_feed = reddit_feed()
+                if len(cmd) > 1:
+                    url = self.reddit_feed.get_reddit_url(cmd[1])
+                else:
+                    url = self.reddit_feed.get_reddit_url()
+                if url:
+                    # warn that the URLs may be NSFW
+                    safe_tell(con, chan, 'NSFW ' + url)
+            except Exception as e:
+                print("%s: %s" % (e.__class__.__name__, e.args))
+                print(traceback.format_exc())
+                return None
 
     def do_try_url(self, evnt):
         nick = evnt.source.nick
