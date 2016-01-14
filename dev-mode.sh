@@ -28,7 +28,8 @@ sleep 15
 echo Starting bot
 sleep 5
 tput setaf 2
-tests-env/bin/python core/bot.py --server localhost -p 6667 -c test  
+#tests-env/bin/python core/bot.py --server localhost -p 6667 -c test  
+tests-env/bin/python core/bot.py test.config
 
 kill %
 echo '[0m;0m'
