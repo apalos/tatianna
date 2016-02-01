@@ -6,6 +6,7 @@
 #
 # -*- coding: UTF-8 -*-
 
+
 import ConfigParser
 import re
 import traceback
@@ -20,6 +21,7 @@ import sys
 import ssl
 import types
 
+
 from BeautifulSoup import BeautifulSoup
 from contextlib import closing
 from ConfigParser import SafeConfigParser
@@ -29,20 +31,25 @@ from os.path import join as os_path_join
 from os.path import isfile as os_path_isfile
 from os.path import dirname as os_path_dirname
 
+
 false = False
 true = True
 none = None
-fkey = None
-fapi = None
+fkey = none
+fapi = none
 pver = sys.version_info
 db_file = 'tat.sqlite3'
 
+
 MAX_DL_SIZE = 3145728
 
+
 class str_ops:
+
     def __init__(self):
         """
         """
+
 
     def uni_dec(self, input):
         if type(input) != unicode:
@@ -51,6 +58,7 @@ class str_ops:
         else:
             return input
 
+
     def uni_enc(self, input):
         if type(input) != unicode:
             input =  input.encode('utf-8')
@@ -58,14 +66,18 @@ class str_ops:
         else:
             return input
 
+
 class db_api:
+
     def __init__(self):
         """
         """
 
+
     def regexp(self, expr, item):
         reg = re.compile(expr)
         return reg.search(item) is not None
+
 
     def init_db(self):
         db = sqlite3.connect(db_file)
@@ -85,6 +97,7 @@ class db_api:
                                                     )''')
         db.close()
 
+
     def query_db(self, query, pattern = None):
         db = sqlite3.connect(db_file)
         db.create_function("REGEXP", 2, self.regexp)
@@ -99,12 +112,14 @@ class db_api:
         db.close()
         return out
 
+
     def add_dbrow(self, query, quote, user = None, channel = None):
         db = sqlite3.connect(db_file)
         dbc = db.cursor()
         dbc.execute(query, (quote, time.strftime('%H-%M-%S %d-%m-%Y'), user, channel))
         db.commit()
         db.close()
+
 
     def query_maxid(self, query):
         db = sqlite3.connect(db_file)
@@ -114,10 +129,13 @@ class db_api:
         db.close()
         return max_q[0]
 
+
 class quote_api:
+
     def __init__(self):
         """
         """
+
 
     def get_quote(self, user, channel, msg):
         toks = msg.split(' ')
@@ -163,6 +181,7 @@ class quote_api:
 
         return q
 
+
     def add_quote(self, user, channel, msg):
         ret = None
         dba = db_api()
@@ -181,10 +200,13 @@ class quote_api:
         ret = 'Quote ' + str(max_q) + ' added!'
         return ret
 
+
 class http_api:
+
     def __init__(self):
         """
         """
+
 
     def get_title(self, url):
         res, resp = open_url(url)
@@ -205,6 +227,7 @@ class http_api:
                     title = ' '
 
         return title
+
 
     def add_url(self, url, user, channel):
         ret = None
@@ -246,6 +269,7 @@ class http_api:
                 out = pattern % (hours, mins, secs)
             ret = 'OLD! ' + qu + ' mentioned it ' + out
         return ret
+
 
 def expand_bot_path(filename):
     '''
@@ -324,10 +348,13 @@ class reddit_feed:
 
         return nfeed + ': ' + link
 
+
 class fb_feed:
+
     def __init__(self):
         """
         """
+
 
     def get_fb_post(self, init_url, rchoice, app_id, app_secret, pnum=None):
         follow_url = init_url + rchoice
@@ -360,11 +387,13 @@ class fb_feed:
             ret = news + link
         return ret
 
+
     def create_post_url(self, graph_url, app_id, app_secret):
         #method to return
         post_args = '/posts/?key=value&access_token=' + app_id + '|' + app_secret
         post_url = graph_url + post_args
         return post_url
+
 
 class bot_connect(irc.bot.SingleServerIRCBot):
     """Connect on channel"""
@@ -394,12 +423,15 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             self.connection.quit("%s: %s" % (e.__class__.__name__, e.args))
         raise
 
+
     # XXX on_ events check events.py
     def on_nicknameinuse(self, con, evnt):
         print("Nickname in use")
 
+
     def on_welcome(self, con, evnt):
         con.join(self.channel)
+
 
     def on_pubmsg(self, con, evnt):
         func = self.get_match(evnt.arguments[0])
@@ -407,6 +439,7 @@ class bot_connect(irc.bot.SingleServerIRCBot):
             method = getattr(self, "do_" + func)
             method(evnt)
         return
+
 
     def do_command(self, evnt):
         nick = evnt.source.nick
@@ -457,6 +490,7 @@ class bot_connect(irc.bot.SingleServerIRCBot):
                 print(traceback.format_exc())
                 return None
 
+
     def do_try_url(self, evnt):
         nick = evnt.source.nick
         chan = self.channel
@@ -478,6 +512,7 @@ class bot_connect(irc.bot.SingleServerIRCBot):
 
         if ret:
             safe_tell(con, chan, '[' + ret + ']')
+
 
     def get_match(self, what):
         chan = self.channel
@@ -552,6 +587,7 @@ def render_to_json(url):
 
     return json_data
 
+
 def safe_tell(con, chan, what):
         #get rid of carriage returns
         sayl = []
@@ -589,8 +625,25 @@ def safe_tell(con, chan, what):
         except irc.client.MessageTooLong as err:
             print(err)
 
+
 def usage():
     print('usage: bot.py <config file>')
+
+
+def random_petname():
+    petnames = none
+    petnames_file = 'petnames.json'
+
+    try:
+        with open(expand_bot_path(petnames_file), 'r') as f:
+            petnames = json.loads(f.read())
+    
+    except Exception as e:
+        print('[!] couldn\'t load petnames, using default list')
+        petnames = ['tatianna', 'svetlana', 'delas', 'teslas']
+
+    return random.choice(petnames)
+
 
 def get_cfg_value(configfile, category, what, strict = 'yes'):
     ret = None
@@ -614,14 +667,6 @@ def get_cfg_value(configfile, category, what, strict = 'yes'):
 
 def main():
 
-    petnames = \
-    [ \
-        'dj-raz',
-        'god',
-        'delas',
-        'teslas',
-        'vrx',
-    ]
     try:
         configfile = sys.argv[1]
     except IndexError:
@@ -646,8 +691,8 @@ def main():
     else:
         ssl_en = false
 
-    nickname = random.choice(petnames)
-    realname = random.choice(petnames)
+    nickname = random_petname()
+    realname = random_petname()
 
     a = db_api()
     a.init_db()
@@ -656,6 +701,7 @@ def main():
         b = bot_connect(channel, nickname, realname, server, port, ssl_en)
     except Exception as e:
         print('%s' % (e))
+
 
 if __name__ == '__main__':
     main()

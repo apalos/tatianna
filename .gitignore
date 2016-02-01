@@ -1,4 +1,6 @@
 notes
+petnames.json
+subreddits.json
 tat.sqlite3
 db.sqlite3
 db.sqlite
@@ -7,3 +9,4 @@ quotes.db
 update.sh
 upstream.sh
 env
+core/config
