@@ -479,7 +479,10 @@ class bot_connect(irc.bot.SingleServerIRCBot):
                     print("Initialising reddit_feed")
                     self.reddit_feed = reddit_feed()
                 if len(cmd) > 1:
-                    url = self.reddit_feed.get_reddit_url(cmd[1])
+                    try:
+                        url = self.reddit_feed.get_reddit_url(cmd[1])
+                    except:
+                        url = self.reddit_feed.get_reddit_url()
                 else:
                     url = self.reddit_feed.get_reddit_url()
                 if url:
