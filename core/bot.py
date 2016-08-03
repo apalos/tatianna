@@ -323,7 +323,7 @@ class reddit_feed:
                 print("%s: %s" % (e.__class__.__name__, e.args))
                 return None
 
-        json_data = render_to_json('http://www.reddit.com/r/' + nfeed + '/top.json?limit=50')
+        json_data = render_to_json('https://www.reddit.com/r/' + nfeed + '/top.json?limit=50')
 
         if json_data:
             try:
@@ -343,6 +343,8 @@ class reddit_feed:
                 link = 'Overexcitement detected. Try again'
             else:
                 link = data['url']
+                if not re.match('^https', link):
+                    link = link.replace('http','https',1)
         else:
             link = 'Failed to fetch data'
 
