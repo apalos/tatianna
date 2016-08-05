@@ -30,6 +30,7 @@ from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 from os.path import join as os_path_join
 from os.path import isfile as os_path_isfile
 from os.path import dirname as os_path_dirname
+from HTMLParser import HTMLParser
 
 
 false = False
@@ -312,6 +313,7 @@ class reddit_feed:
     def get_reddit_url(self, what = None):
         subreddits = self.subreddits
         link = ''
+        html_parser = HTMLParser()
 
         if what:
             nfeed = what
@@ -345,6 +347,7 @@ class reddit_feed:
                 link = data['url']
                 if not re.match('^https', link):
                     link = link.replace('http','https',1)
+                link = html_parser.unescape(link)
         else:
             link = 'Failed to fetch data'
 
