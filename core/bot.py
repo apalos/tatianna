@@ -12,6 +12,7 @@ import re
 import traceback
 import requests
 import json
+import os
 import random
 import time
 import sqlite3
@@ -31,7 +32,7 @@ from os.path import join as os_path_join
 from os.path import isfile as os_path_isfile
 from os.path import dirname as os_path_dirname
 from HTMLParser import HTMLParser
-
+from slackclient import SlackClient
 
 false = False
 true = True
@@ -645,7 +646,7 @@ def random_petname():
     try:
         with open(expand_bot_path(petnames_file), 'r') as f:
             petnames = json.loads(f.read())
-    
+
     except Exception as e:
         print('[!] couldn\'t load petnames, using default list')
         petnames = ['tatianna', 'svetlana', 'delas', 'teslas']
@@ -673,8 +674,7 @@ def get_cfg_value(configfile, category, what, strict = 'yes'):
     return ret
 
 
-def main():
-
+def irc_main():
     try:
         configfile = sys.argv[1]
     except IndexError:
@@ -709,6 +709,113 @@ def main():
         b = bot_connect(channel, nickname, realname, server, port, ssl_en)
     except Exception as e:
         print('%s' % (e))
+
+
+def get_users_map(sc):
+    result = {}
+    users = sc.api_call('users.list')
+    for user in users.get('members', []):
+        try:
+            result[user['id']] = user['name']
+        except KeyError:
+            print 'failed: %s' % user
+    return result
+
+
+def get_channels_map(sc):
+    result = {}
+    channels = sc.api_call('channels.list')['channels']
+    for channel in channels:
+        try:
+           result[channel['id']] = channel['name']
+        except KeyError:
+            print 'failed processing channel: %s' % channel
+    return result
+
+
+def handle_slack_message(sc, data):
+    ret = None
+    if data['text'][0] != '!':
+        return
+    try:
+        cmd, args = data['text'].split(' ', 1)
+    except ValueError:
+        cmd = data['text']
+        args = ''
+
+    f_args = [data['user_name'], data['channel_name'], data['text']]
+    if cmd == '!quote':
+        ret = quote_api().get_quote(*f_args)
+    elif cmd == '!add':
+        ret = quote_api().add_quote(*f_args)
+
+    if ret:
+        sc.rtm_send_message(data['out_channel'], ret)
+
+
+def slack_main():
+    try:
+        configfile = sys.argv[1]
+    except IndexError:
+        usage()
+        exit(1)
+
+    # XXX FIXME better error checking on config file
+    try:
+        channel =  get_cfg_value(configfile, 'slack', 'channel')
+        if 'SLACKTOKEN' not in os.environ:
+            slack_token = get_cfg_value(configfile, 'slack', 'token')
+        else:
+            slack_token = os.environ['SLACKTOKEN']
+    except ValueError as e:
+        print('Options missing %s') % e
+        exit(1);
+    rtm_handler = {
+            'message': handle_slack_message,
+            }
+    sc = SlackClient(slack_token)
+    users_map = get_users_map(sc)
+    channels_map = get_channels_map(sc)
+    sc.api_call('channels.join', channel=channel)
+    sc.api_call('chat.postMessage',
+            channel=channel,
+            text='lulz',
+            thread_ts=str(time.time())
+            )
+    if sc.rtm_connect():
+        while True:
+            events = sc.rtm_read()
+            for data in events:
+                if data == [] or 'type' not in data.keys():
+                    continue
+                if data['type'] in ['channel_joined']:
+                    continue
+                data['out_channel'] = channel
+                msg_type = data.get('type', 'UNKNOWN')
+                if msg_type == 'member_joined_channel':
+                    users_map = get_users_map(sc)
+                else:
+                    try:
+                        if 'user' in data and data['user'] in users_map:
+                            data['user_name'] = users_map[data['user']]
+                        if 'channel' in data and data['channel'] in channels_map:
+                            data['channel_name'] = '#%s' % channels_map[data['channel']]
+                        data['channel_name'] = 'C56E9NVEY'
+                        rtm_handler[msg_type](sc, data)
+                    except KeyError:
+                        #print 'Unknown event: %s' % data
+                        pass
+            time.sleep(1)
+    else:
+        print 'connection failed, invalid token'
+
+
+def main():
+    db_api().init_db()
+    if 'SLACKBOT' in os.environ:
+        slack_main()
+    else:
+        irc_main()
 
 
 if __name__ == '__main__':
