@@ -20,6 +20,7 @@ import irc.bot
 import irc.strings
 import sys
 import ssl
+import traceback
 import types
 
 
@@ -805,6 +806,9 @@ def slack_main():
                     except KeyError:
                         #print 'Unknown event: %s' % data
                         pass
+                    except TypeError:
+                        print 'some shit about types fuck it'
+                        traceback.print_exc()
             time.sleep(1)
     else:
         print 'connection failed, invalid token'
