@@ -751,7 +751,8 @@ def handle_slack_message(sc, data):
         ret = quote_api().add_quote(*f_args)
 
     if ret:
-        sc.rtm_send_message(data['out_channel'], ret)
+        ret = ret.replace('@', '')
+        sc.rtm_send_message(data['out_channel'], '> %s' % ret)
 
 
 def slack_main():
