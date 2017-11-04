@@ -728,7 +728,9 @@ def get_channels_map(sc):
     channels = sc.api_call('channels.list')['channels']
     for channel in channels:
         try:
-           result[channel['id']] = channel['name']
+            # This was incorrectly indented by 1 space yet somehow
+            # it was NOT throwing an exception, no idea why...
+            result[channel['id']] = channel['name']
         except KeyError:
             print 'failed processing channel: %s' % channel
     return result
