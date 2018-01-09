@@ -728,7 +728,9 @@ def get_channels_map(sc):
     channels = sc.api_call('channels.list')['channels']
     for channel in channels:
         try:
-           result[channel['id']] = channel['name']
+            # This was incorrectly indented by 1 space yet somehow
+            # it was NOT throwing an exception, no idea why...
+            result[channel['id']] = channel['name']
         except KeyError:
             print 'failed processing channel: %s' % channel
     return result
@@ -736,8 +738,9 @@ def get_channels_map(sc):
 
 def handle_slack_message(sc, data):
     ret = None
-    if data['text'][0] != '!':
+    if not data['text'].startswith('!'):
         return
+
     try:
         cmd, args = data['text'].split(' ', 1)
     except ValueError:
@@ -752,7 +755,15 @@ def handle_slack_message(sc, data):
 
     if ret:
         ret = ret.replace('@', '')
+        # Since we are using the > slack quote the message will appear
+        # in new line anyway
         sc.rtm_send_message(data['out_channel'], '> %s' % ret)
+
+        # If you need to do raw call this works too
+        #sc.api_call('chat.postMessage',
+        #   channel=data['out_channel'],
+        #   text='> %s' % ret,
+        #   as_user=True)
 
 
 def slack_main():
@@ -764,7 +775,8 @@ def slack_main():
 
     # XXX FIXME better error checking on config file
     try:
-        channel =  get_cfg_value(configfile, 'slack', 'channel')
+        channel = get_cfg_value(configfile, 'slack', 'channel')
+        # bots can't join channels, invite bot by typing its @name
         if 'SLACKTOKEN' not in os.environ:
             slack_token = get_cfg_value(configfile, 'slack', 'token')
         else:
@@ -778,19 +790,18 @@ def slack_main():
     sc = SlackClient(slack_token)
     users_map = get_users_map(sc)
     channels_map = get_channels_map(sc)
-    sc.api_call('channels.join', channel=channel)
-    sc.api_call('chat.postMessage',
-            channel=channel,
-            text='lulz',
-            thread_ts=str(time.time())
-            )
+    ignore_events = [ 'reconnect_url', 'channel_joined' ]
     if sc.rtm_connect():
+        sc.api_call('chat.postMessage',
+            channel=channel,
+            text='lulz 0.1',
+            as_user=True)
         while True:
             events = sc.rtm_read()
             for data in events:
                 if data == [] or 'type' not in data.keys():
                     continue
-                if data['type'] in ['channel_joined']:
+                if data['type'] in ignore_events:
                     continue
                 data['out_channel'] = channel
                 msg_type = data.get('type', 'UNKNOWN')

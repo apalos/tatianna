@@ -10,3 +10,4 @@ update.sh
 upstream.sh
 env
 core/config
+*.pyc
